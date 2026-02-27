@@ -1,0 +1,23 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+.vs/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Environment
+appsettings.Development.json
+*.env
+
+# Database
+*.mdf
+*.ldf
+
+# Logs
+*.log
