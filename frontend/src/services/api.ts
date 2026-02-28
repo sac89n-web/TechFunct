@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { HeatmapItem, MomentumItem, StockAnalysis, MarketBreadth, StrategyRanking, IndexQuote } from '../types';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 export const authApi = {
   getSession: async (): Promise<{ isAuthenticated: boolean }> => {

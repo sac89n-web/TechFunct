@@ -193,6 +193,49 @@ Response includes:
 - Updates momentum scores
 - Pushes real-time updates via SignalR
 
+## Deployment to Render
+
+This repository contains both the frontend (React/Vite) and backend (.NET 8) and can be deployed
+as two services on [Render](https://render.com).  The high‑level steps are:
+
+1. **Push the code to GitHub** (already done).
+2. **Connect the repo to Render** via the dashboard.
+3. Create two services:
+   * **Backend** – a web service using the `dotnet` environment.
+     * Build command:
+       ```bash
+       cd backend/MarketAnalytics.API && dotnet publish -c Release -o out
+       ```
+     * Start command:
+       ```bash
+       cd backend/MarketAnalytics.API/out && dotnet MarketAnalytics.API.dll
+       ```
+     * Set the following environment variables in the Render dashboard:
+       * `ConnectionStrings__DefaultConnection` – your PostgreSQL connection string
+       * `KITE__APIKEY` and `KITE__APISECRET` – Kite Connect credentials
+       * `AllowedOrigins` – frontend URL (e.g. `https://your-frontend.onrender.com`)
+     * Use port `5000` (Render sets `$PORT` automatically; the template will fall back to 5000).
+   * **Frontend** – a static site (or web service) using the `node` environment.
+     * Build command:
+       ```bash
+       cd frontend && npm install && npm run build
+       ```
+     * Publish directory: `frontend/dist`
+     * Define environment variable `VITE_API_BASE` to the backend service URL,
+       e.g. `https://your-backend.onrender.com`
+     * You can also expose any other runtime variables prefixed with `VITE_`.
+   * After deployment, the backend CORS policy will read the `AllowedOrigins` variable
+     so it only accepts requests from the frontend domain.
+
+When the frontend is served from Render, `import.meta.env.VITE_API_BASE` will point
+at the backend; local development still works with `npm run dev` thanks to the proxy
+configured in `vite.config.ts`.
+
+Refer to the code comments in `Program.cs` and `frontend/src/services/api.ts` for
+more details on environment variable handling.
+
+---
+
 ## 📊 Technical Indicators
 
 ### Calculated Automatically:

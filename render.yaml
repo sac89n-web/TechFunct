@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: market-analytics-backend
+    env: dotnet
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: "cd backend/MarketAnalytics.API && dotnet publish -c Release -o out"
+    startCommand: "cd backend/MarketAnalytics.API/out && dotnet MarketAnalytics.API.dll"
+    envVars:
+      - key: ConnectionStrings__DefaultConnection
+      - key: KITE__APIKEY
+      - key: KITE__APISECRET
+      - key: AllowedOrigins
+    ports:
+      - 5000
+
+  - type: static
+    name: market-analytics-frontend
+    env: node
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: "cd frontend && npm install && npm run build"
+    staticPublishPath: "frontend/dist"
+    envVars:
+      - key: VITE_API_BASE

@@ -30,9 +30,15 @@ builder.Services.AddHostedService<MarketDataSyncService>();
 
 builder.Services.AddCors(options =>
 {
+    // allow origins from configuration (semicolon-separated) or default to localhost
+    var origins = builder.Configuration.GetValue<string>("AllowedOrigins");
+    string[] allowed = string.IsNullOrEmpty(origins)
+        ? new[] { "http://127.0.0.1:3000" }
+        : origins.Split(';', StringSplitOptions.RemoveEmptyEntries);
+
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins("http://127.0.0.1:3000")
+        policy.WithOrigins(allowed)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
