@@ -14,6 +14,18 @@ using Npgsql;
 
 namespace MarketAnalytics.API.BackgroundServices;
 
+internal class MomentumCalcRow
+{
+    public long InstrumentToken { get; set; }
+    public decimal Ltp { get; set; }
+    public decimal? Sma20 { get; set; }
+    public decimal? Sma50 { get; set; }
+    public decimal? Rsi14 { get; set; }
+    public decimal? VolumeRatio { get; set; }
+    public decimal? DistanceFromSma50 { get; set; }
+    public bool IsGoldenCross { get; set; }
+}
+
 public class MarketDataSyncService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
@@ -95,24 +107,32 @@ public class MarketDataSyncService : BackgroundService
         foreach (var symbol in symbols)
         {
             var query = @"
-                SELECT ms.*, ti.*
+                SELECT
+                    ms.instrument_token AS InstrumentToken,
+                    ms.ltp AS Ltp,
+                    ti.sma20 AS Sma20,
+                    ti.sma50 AS Sma50,
+                    ti.rsi14 AS Rsi14,
+                    ti.volume_ratio AS VolumeRatio,
+                    ti.distance_from_sma50 AS DistanceFromSma50,
+                    ti.is_golden_cross AS IsGoldenCross
                 FROM market_snapshot ms
                 LEFT JOIN technical_indicators ti ON ms.symbol = ti.symbol
                 WHERE ms.symbol = @Symbol";
 
-            var data = await connection.QueryFirstOrDefaultAsync<dynamic>(query, new { Symbol = symbol });
+            var data = await connection.QueryFirstOrDefaultAsync<MomentumCalcRow>(query, new { Symbol = symbol });
             if (data == null) continue;
 
             decimal score = 0;
-            bool priceAboveSMA20 = data.ltp > data.sma20;
-            bool priceAboveSMA50 = data.ltp > data.sma50;
+            bool priceAboveSMA20 = data.Ltp > data.Sma20;
+            bool priceAboveSMA50 = data.Ltp > data.Sma50;
 
             if (priceAboveSMA20) score += 15;
             if (priceAboveSMA50) score += 20;
-            if (data.rsi14 >= 50 && data.rsi14 <= 70) score += 15;
-            if (data.volume_ratio > 1.5m) score += 20;
-            if (data.distance_from_sma50 >= -2 && data.distance_from_sma50 <= 2) score += 15;
-            if (data.is_golden_cross) score += 15;
+            if (data.Rsi14 >= 50 && data.Rsi14 <= 70) score += 15;
+            if (data.VolumeRatio > 1.5m) score += 20;
+            if (data.DistanceFromSma50 >= -2 && data.DistanceFromSma50 <= 2) score += 15;
+            if (data.IsGoldenCross) score += 15;
 
             string signal = score switch
             {
@@ -132,7 +152,7 @@ public class MarketDataSyncService : BackgroundService
                 new
                 {
                     Symbol = symbol,
-                    InstrumentToken = (long)data.instrument_token,
+                    InstrumentToken = data.InstrumentToken,
                     Score = score,
                     Signal = signal,
                     PriceAboveSMA20 = priceAboveSMA20,

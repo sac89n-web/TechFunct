@@ -1,8 +1,11 @@
+using Dapper;
 using MarketAnalytics.API.BackgroundServices;
 using MarketAnalytics.API.Hubs;
 using MarketAnalytics.Core.Interfaces;
 using MarketAnalytics.Infrastructure.Cache;
 using MarketAnalytics.Infrastructure.Services;
+
+DefaultTypeMap.MatchNamesWithUnderscores = true;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +22,7 @@ builder.Services.AddScoped<IInstrumentService, InstrumentService>();
 builder.Services.AddScoped<IHistoricalDataService, HistoricalDataService>();
 builder.Services.AddScoped<IIndicatorEngine, IndicatorEngine>();
 builder.Services.AddScoped<IMarketAnalyticsService, MarketAnalyticsService>();
+builder.Services.AddScoped<IStrategyService, StrategyService>();
 builder.Services.AddSingleton<IWebSocketService, WebSocketService>();
 
 builder.Services.AddHostedService<TokenRefreshService>();
@@ -28,9 +32,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins("http://127.0.0.1:3000")
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 

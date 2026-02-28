@@ -65,7 +65,7 @@ Amazon Q Developer must adhere to these when generating, reviewing, or refactori
 * Logging via structured logger (Winston / Pino).
 * Implement retry & back-off for external API failures.
 * Use environment variables (`process.env.*`) – never constants.
-* Enable CORS only for approved origins (`localhost:3000`, prod domain).
+* Enable CORS only for approved origins (`127.0.0.1:3000`, prod domain).
 
 ---
 

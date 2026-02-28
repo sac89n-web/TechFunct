@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace MarketAnalytics.Core.DTOs;
 
@@ -28,6 +29,7 @@ public class StockAnalysisDto
 {
     public string Symbol { get; set; } = string.Empty;
     public decimal CurrentPrice { get; set; }
+    public decimal ChangePercent { get; set; }
     public decimal? SMA20 { get; set; }
     public decimal? SMA50 { get; set; }
     public decimal? SMA200 { get; set; }
@@ -81,6 +83,49 @@ public class KiteHistoricalDataDto
     public decimal Low { get; set; }
     public decimal Close { get; set; }
     public long Volume { get; set; }
+}
+
+public class IndexQuoteDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string KiteSymbol { get; set; } = string.Empty;
+    public decimal LastPrice { get; set; }
+    public decimal Change { get; set; }
+    public decimal ChangePercent { get; set; }
+    public decimal Open { get; set; }
+    public decimal High { get; set; }
+    public decimal Low { get; set; }
+    public decimal PrevClose { get; set; }
+}
+
+public class StrategyFactorDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public bool Passed { get; set; }
+    public int Points { get; set; }
+    public string ActualValue { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+}
+
+public class StrategyRankingDto
+{
+    public int Rank { get; set; }
+    public string Symbol { get; set; } = string.Empty;
+    public decimal LTP { get; set; }
+    public decimal ChangePercent { get; set; }
+    public string? Sector { get; set; }
+    public int TotalScore { get; set; }
+    public int MaxScore { get; set; }
+    public decimal ScorePercent { get; set; }
+    public string Signal { get; set; } = string.Empty;
+    public string StrategyTag { get; set; } = string.Empty;
+    public decimal? RSI { get; set; }
+    public decimal? VolumeRatio { get; set; }
+    public decimal? MomentumScore { get; set; }
+    public decimal? SMA50Distance { get; set; }
+    public bool? GoldenCross { get; set; }
+    public List<StrategyFactorDto> Factors { get; set; } = new();
 }
 
 public class KiteTickDto

@@ -106,6 +106,87 @@ public class IndicatorEngine : IIndicatorEngine
         );
     }
 
+    public async Task CalculateMomentumScoresAsync(List<string> symbols)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+
+        foreach (var symbol in symbols)
+        {
+            var data = await connection.QueryFirstOrDefaultAsync<MomentumCalcRow>(@"
+                SELECT
+                    ms.instrument_token,
+                    ms.ltp,
+                    ti.sma20,
+                    ti.sma50,
+                    ti.rsi14,
+                    ti.volume_ratio,
+                    ti.distance_from_sma50,
+                    COALESCE(ti.is_golden_cross, false) AS is_golden_cross
+                FROM market_snapshot ms
+                LEFT JOIN (
+                    SELECT DISTINCT ON (symbol) *
+                    FROM technical_indicators
+                    ORDER BY symbol, calculation_date DESC
+                ) ti ON ms.symbol = ti.symbol
+                WHERE ms.symbol = @Symbol",
+                new { Symbol = symbol });
+
+            if (data == null) continue;
+
+            decimal score = 0;
+            bool priceAboveSMA20 = data.Sma20.HasValue && data.Ltp > data.Sma20.Value;
+            bool priceAboveSMA50 = data.Sma50.HasValue && data.Ltp > data.Sma50.Value;
+
+            if (priceAboveSMA20) score += 15;
+            if (priceAboveSMA50) score += 20;
+            if (data.Rsi14 >= 50 && data.Rsi14 <= 70) score += 15;
+            if (data.VolumeRatio > 1.5m) score += 20;
+            if (data.DistanceFromSma50 >= -2 && data.DistanceFromSma50 <= 2) score += 15;
+            if (data.IsGoldenCross) score += 15;
+
+            string signal = score switch
+            {
+                > 75 => "STRONG BUY",
+                >= 60 => "BUILDING MOMENTUM",
+                >= 40 => "WATCHLIST",
+                _ => "WEAK"
+            };
+
+            await connection.ExecuteAsync(
+                @"INSERT INTO momentum_scores
+                    (symbol, instrument_token, momentum_score, signal, price_above_sma20, price_above_sma50, calculation_date)
+                  VALUES
+                    (@Symbol, @InstrumentToken, @Score, @Signal, @PriceAboveSMA20, @PriceAboveSMA50, @CalculationDate)
+                  ON CONFLICT (symbol, calculation_date) DO UPDATE SET
+                    momentum_score = @Score, signal = @Signal,
+                    price_above_sma20 = @PriceAboveSMA20, price_above_sma50 = @PriceAboveSMA50",
+                new
+                {
+                    Symbol = symbol,
+                    InstrumentToken = data.InstrumentToken,
+                    Score = score,
+                    Signal = signal,
+                    PriceAboveSMA20 = priceAboveSMA20,
+                    PriceAboveSMA50 = priceAboveSMA50,
+                    CalculationDate = DateTime.UtcNow.Date
+                });
+        }
+
+        _logger.LogInformation("Calculated momentum scores for {Count} symbols", symbols.Count);
+    }
+
+    private class MomentumCalcRow
+    {
+        public long InstrumentToken { get; set; }
+        public decimal Ltp { get; set; }
+        public decimal? Sma20 { get; set; }
+        public decimal? Sma50 { get; set; }
+        public decimal? Rsi14 { get; set; }
+        public decimal? VolumeRatio { get; set; }
+        public decimal? DistanceFromSma50 { get; set; }
+        public bool IsGoldenCross { get; set; }
+    }
+
     private static decimal? CalculateSMA(List<decimal> values, int period)
     {
         if (values.Count < period) return null;

@@ -7,8 +7,8 @@ using Dapper;
 using MarketAnalytics.Core.Entities;
 using MarketAnalytics.Core.Interfaces;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Npgsql;
 
 namespace MarketAnalytics.Infrastructure.Services;
@@ -88,6 +88,165 @@ public class InstrumentService : IInstrumentService
         return instruments.ToList();
     }
 
+
+    public async System.Threading.Tasks.Task<System.Collections.Generic.List<string>> GetIndexSymbolsAsync(string indexName)
+    {
+        var sectorSymbols = GetSectorIndexSymbols(indexName);
+        if (sectorSymbols != null)
+            return sectorSymbols.ToList();
+
+        using var connection = new NpgsqlConnection(_connectionString);
+        var symbols = await connection.QueryAsync<string>(
+            "SELECT trading_symbol FROM instrument_master WHERE index_name = @IndexName AND exchange = 'NSE'",
+            new { IndexName = indexName }
+        );
+        return symbols.ToList();
+    }
+
+    private static System.Collections.Generic.HashSet<string>? GetSectorIndexSymbols(string indexName) => indexName switch
+    {
+        "NIFTY BANK" => new System.Collections.Generic.HashSet<string> {
+            "HDFCBANK", "ICICIBANK", "KOTAKBANK", "AXISBANK", "SBIN", "INDUSINDBK",
+            "BANDHANBNK", "FEDERALBNK", "IDFCFIRSTB", "PNB", "RBLBANK", "AUBANK" },
+        "NIFTY IT" => new System.Collections.Generic.HashSet<string> {
+            "TCS", "INFY", "WIPRO", "HCLTECH", "TECHM", "LTIM",
+            "MPHASIS", "COFORGE", "PERSISTENT", "OFSS" },
+        "NIFTY PHARMA" => new System.Collections.Generic.HashSet<string> {
+            "SUNPHARMA", "DRREDDY", "CIPLA", "DIVISLAB", "APOLLOHOSP",
+            "TORNTPHARM", "ALKEM", "LUPIN", "AUROPHARMA", "BIOCON" },
+        "NIFTY AUTO" => new System.Collections.Generic.HashSet<string> {
+            "MARUTI", "TATAMOTORS", "BAJAJ-AUTO", "HEROMOTOCO", "EICHERMOT",
+            "M&M", "TVSMOTOR", "BOSCHLTD", "BALKRISIND", "APOLLOTYRE" },
+        "NIFTY FMCG" => new System.Collections.Generic.HashSet<string> {
+            "HINDUNILVR", "ITC", "NESTLEIND", "BRITANNIA", "DABUR",
+            "GODREJCP", "MARICO", "COLPAL", "EMAMILTD", "TATACONSUM" },
+        _ => null
+    };
+
+    public async Task<List<InstrumentMaster>> GetInstrumentsBySymbolsAsync(IEnumerable<string> symbols)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        var result = await connection.QueryAsync<InstrumentMaster>(
+            "SELECT * FROM instrument_master WHERE trading_symbol = ANY(@Symbols) AND exchange = 'NSE'",
+            new { Symbols = symbols.ToArray() });
+        return result.ToList();
+    }
+
+    public async Task SeedMarketSnapshotAsync(IEnumerable<InstrumentMaster> instruments)
+    {
+        var accessToken = await _kiteService.GetActiveAccessTokenAsync();
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            _logger.LogWarning("No active access token for quote seeding");
+            return;
+        }
+
+        _httpClient.DefaultRequestHeaders.Clear();
+        _httpClient.DefaultRequestHeaders.Add("X-Kite-Version", "3");
+        _httpClient.DefaultRequestHeaders.Add("Authorization", $"token {_config["Kite:ApiKey"]}:{accessToken}");
+
+        var instrumentList = instruments.ToList();
+        const int batchSize = 500;
+
+        using var connection = new NpgsqlConnection(_connectionString);
+
+        for (int offset = 0; offset < instrumentList.Count; offset += batchSize)
+        {
+            var batch = instrumentList.Skip(offset).Take(batchSize).ToList();
+            var queryString = string.Join("&", batch.Select(i => $"i=NSE:{Uri.EscapeDataString(i.TradingSymbol)}"));
+
+            try
+            {
+                var response = await _httpClient.GetAsync($"https://api.kite.trade/quote?{queryString}");
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Kite quote API returned {Status}", response.StatusCode);
+                    continue;
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<KiteQuoteResponse>(json);
+                if (result?.Data == null) continue;
+
+                foreach (var inst in batch)
+                {
+                    var key = $"NSE:{inst.TradingSymbol}";
+                    if (!result.Data.TryGetValue(key, out var quote)) continue;
+
+                    var prevClose = quote.Ohlc?.Close ?? 0m;
+                    var changePercent = prevClose > 0
+                        ? ((quote.LastPrice - prevClose) / prevClose) * 100m
+                        : 0m;
+
+                    await connection.ExecuteAsync(
+                        @"INSERT INTO market_snapshot
+                            (symbol, instrument_token, ltp, change_percent, volume, high, low, open, index_name, last_updated)
+                          VALUES
+                            (@Symbol, @InstrumentToken, @Ltp, @ChangePercent, @Volume, @High, @Low, @Open, @IndexName, @LastUpdated)
+                          ON CONFLICT (symbol) DO UPDATE SET
+                            ltp = @Ltp, change_percent = @ChangePercent, volume = @Volume,
+                            high = @High, low = @Low, open = @Open, last_updated = @LastUpdated",
+                        new
+                        {
+                            Symbol = inst.TradingSymbol,
+                            InstrumentToken = inst.InstrumentToken,
+                            Ltp = quote.LastPrice,
+                            ChangePercent = changePercent,
+                            Volume = quote.VolumeTraded,
+                            High = quote.Ohlc?.High ?? 0m,
+                            Low = quote.Ohlc?.Low ?? 0m,
+                            Open = quote.Ohlc?.Open ?? 0m,
+                            IndexName = inst.IndexName,
+                            LastUpdated = DateTime.UtcNow
+                        });
+                }
+
+                _logger.LogInformation("Seeded market_snapshot for {Count} symbols", batch.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to seed market snapshot for batch at offset {Offset}", offset);
+            }
+        }
+    }
+
+    // Private DTOs for Kite quote REST response
+    private class KiteQuoteResponse
+    {
+        [JsonProperty("status")]
+        public string Status { get; set; } = string.Empty;
+
+        [JsonProperty("data")]
+        public Dictionary<string, KiteQuote>? Data { get; set; }
+    }
+
+    private class KiteQuote
+    {
+        [JsonProperty("last_price")]
+        public decimal LastPrice { get; set; }
+
+        [JsonProperty("volume_traded")]
+        public long VolumeTraded { get; set; }
+
+        [JsonProperty("ohlc")]
+        public KiteOhlc? Ohlc { get; set; }
+    }
+
+    private class KiteOhlc
+    {
+        [JsonProperty("open")]
+        public decimal Open { get; set; }
+
+        [JsonProperty("high")]
+        public decimal High { get; set; }
+
+        [JsonProperty("low")]
+        public decimal Low { get; set; }
+
+        [JsonProperty("close")]
+        public decimal Close { get; set; }
+    }
+
     private List<InstrumentMaster> ParseInstrumentsCsv(string csvData)
     {
         var instruments = new List<InstrumentMaster>();
@@ -95,24 +254,30 @@ public class InstrumentService : IInstrumentService
         
         var nifty50Symbols = GetNifty50Symbols();
         
+        // CSV columns: instrument_token(0), exchange_token(1), tradingsymbol(2), name(3),
+        //              last_price(4), expiry(5), strike(6), tick_size(7), lot_size(8),
+        //              instrument_type(9), segment(10), exchange(11)
         for (int i = 1; i < lines.Length; i++)
         {
             var fields = lines[i].Split(',');
-            if (fields.Length < 6) continue;
+            if (fields.Length < 12) continue;
 
-            var symbol = fields[2].Trim('"');
-            var exchange = fields[3].Trim('"');
-            
-            if (exchange != "NSE" || fields[1].Trim('"') != "EQ") continue;
+            var symbol = fields[2].Trim('"', ' ');
+            var exchange = fields[11].Trim('"', ' ');
+            var instrumentType = fields[9].Trim('"', ' ');
+
+            if (exchange != "NSE" || instrumentType != "EQ") continue;
+
+            if (!long.TryParse(fields[0].Trim(), out var token)) continue;
 
             var instrument = new InstrumentMaster
             {
-                InstrumentToken = long.Parse(fields[0]),
+                InstrumentToken = token,
                 TradingSymbol = symbol,
                 Exchange = exchange,
-                Segment = fields[1].Trim('"'),
-                TickSize = decimal.TryParse(fields[6], out var tick) ? tick : null,
-                LotSize = int.TryParse(fields[7], out var lot) ? lot : null,
+                Segment = fields[10].Trim('"', ' '),
+                TickSize = decimal.TryParse(fields[7].Trim(), out var tick) ? tick : null,
+                LotSize = int.TryParse(fields[8].Trim(), out var lot) ? lot : null,
                 IndexName = nifty50Symbols.Contains(symbol) ? "NIFTY50" : null,
                 LastUpdated = DateTime.UtcNow
             };

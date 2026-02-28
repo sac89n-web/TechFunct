@@ -26,6 +26,11 @@ public class InstrumentMaster
     public string? IndexName { get; set; }
     public decimal? IndexWeight { get; set; }
     public DateTime LastUpdated { get; set; }
+    // Options-specific fields (null for EQ instruments)
+    public string? Name { get; set; }           // e.g. "NIFTY", "BANKNIFTY"
+    public DateTime? Expiry { get; set; }        // expiry date
+    public decimal? Strike { get; set; }         // strike price
+    public string? InstrumentType { get; set; } // CE / PE / EQ / FUT
 }
 
 public class StockPriceHistory

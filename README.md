@@ -73,7 +73,7 @@ Edit `backend/MarketAnalytics.API/appsettings.json`:
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Database=marketanalytics;Username=postgres;Password=postgres"
+    "DefaultConnection": "Host=127.0.0.1;Database=marketanalytics;Username=postgres;Password=postgres"
   },
   "Kite": {
     "ApiKey": "YOUR_KITE_API_KEY",
@@ -92,7 +92,7 @@ cd MarketAnalytics.API
 dotnet run
 ```
 
-Backend will start on `http://localhost:5000`
+Backend will start on `http://127.0.0.1:5000`
 
 ### 4. Frontend Setup & Run
 
@@ -102,13 +102,13 @@ npm install
 npm run dev
 ```
 
-Frontend will start on `http://localhost:3000`
+Frontend will start on `http://127.0.0.1:3000`
 
 ## 🔐 Kite Connect Authentication Flow
 
 ### Step 1: Get Login URL
 ```bash
-GET http://localhost:5000/api/auth/login-url
+GET http://127.0.0.1:5000/api/auth/login-url
 ```
 
 Response:
@@ -125,7 +125,7 @@ Response:
 
 ### Step 3: Generate Session
 ```bash
-POST http://localhost:5000/api/auth/session
+POST http://127.0.0.1:5000/api/auth/session
 Content-Type: application/json
 
 {

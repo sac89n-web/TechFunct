@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using MarketAnalytics.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -24,6 +25,9 @@ public class StockController : ControllerBase
         if (string.IsNullOrWhiteSpace(symbol))
             return BadRequest(new { error = "Symbol is required" });
 
+        if (!Regex.IsMatch(symbol, @"^[A-Z0-9\-&]{1,20}$", RegexOptions.IgnoreCase))
+            return BadRequest(new { error = "Invalid symbol format" });
+
         try
         {
             var analysis = await _analyticsService.GetStockAnalysisAsync(symbol.ToUpper());
@@ -36,6 +40,21 @@ public class StockController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Stock analysis failed for {Symbol}", symbol);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("analyze-index")]
+    public async Task<IActionResult> AnalyzeIndex([FromQuery] string index = "NIFTY50")
+    {
+        try
+        {
+            var results = await _analyticsService.GetIndexAnalysisAsync(index);
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Index analysis failed for {Index}", index);
             return StatusCode(500, new { error = ex.Message });
         }
     }

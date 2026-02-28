@@ -21,6 +21,7 @@ export interface MomentumItem {
 export interface StockAnalysis {
   symbol: string;
   currentPrice: number;
+  changePercent: number;
   sma20?: number;
   sma50?: number;
   sma200?: number;
@@ -46,4 +47,44 @@ export interface MarketBreadth {
   unchanged: number;
   advanceDeclineRatio: number;
   calculationDate: string;
+}
+
+export interface IndexQuote {
+  name: string;
+  kiteSymbol: string;
+  lastPrice: number;
+  change: number;
+  changePercent: number;
+  open: number;
+  high: number;
+  low: number;
+  prevClose: number;
+}
+
+export interface StrategyFactor {
+  name: string;
+  category: string;
+  passed: boolean;
+  points: number;
+  actualValue: string;
+  description: string;
+}
+
+export interface StrategyRanking {
+  rank: number;
+  symbol: string;
+  ltp: number;
+  changePercent: number;
+  sector?: string;
+  totalScore: number;
+  maxScore: number;
+  scorePercent: number;
+  signal: string;
+  strategyTag: string;
+  rsi?: number;
+  volumeRatio?: number;
+  momentumScore?: number;
+  sma50Distance?: number;
+  goldenCross?: boolean;
+  factors: StrategyFactor[];
 }

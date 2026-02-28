@@ -10,12 +10,9 @@ using MarketAnalytics.Core.DTOs;
 using MarketAnalytics.Core.Entities;
 using MarketAnalytics.Core.Interfaces;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Npgsql;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace MarketAnalytics.Infrastructure.Services;
 
@@ -124,7 +121,9 @@ public class KiteConnectService : IKiteConnectService
         
         await connection.ExecuteAsync(
             @"INSERT INTO kite_session (access_token, public_token, user_id, created_date, expiry_date, is_active)
-              VALUES (@AccessToken, @PublicToken, @UserId, @CreatedDate, @ExpiryDate, TRUE)",
+              VALUES (@AccessToken, @PublicToken, @UserId, @CreatedDate, @ExpiryDate, TRUE)
+              ON CONFLICT (access_token) DO UPDATE
+                SET is_active = TRUE, created_date = @CreatedDate, expiry_date = @ExpiryDate",
             new
             {
                 authResponse.AccessToken,

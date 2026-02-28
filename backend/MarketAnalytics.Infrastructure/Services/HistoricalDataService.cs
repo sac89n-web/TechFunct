@@ -7,7 +7,6 @@ using Dapper;
 using MarketAnalytics.Core.Entities;
 using MarketAnalytics.Core.Interfaces;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Npgsql;

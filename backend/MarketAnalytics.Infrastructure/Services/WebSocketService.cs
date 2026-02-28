@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MarketAnalytics.Core.DTOs;
 using MarketAnalytics.Core.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
@@ -14,14 +15,16 @@ namespace MarketAnalytics.Infrastructure.Services;
 public class WebSocketService : IWebSocketService
 {
     private readonly ILogger<WebSocketService> _logger;
+    private readonly string _apiKey;
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cancellationTokenSource;
-    
+
     public event EventHandler<KiteTickDto>? OnTickReceived;
 
-    public WebSocketService(ILogger<WebSocketService> logger)
+    public WebSocketService(ILogger<WebSocketService> logger, IConfiguration config)
     {
         _logger = logger;
+        _apiKey = config["Kite:ApiKey"] ?? throw new InvalidOperationException("Kite API Key missing");
     }
 
     public async Task ConnectAsync(string accessToken)
@@ -29,7 +32,7 @@ public class WebSocketService : IWebSocketService
         _webSocket = new ClientWebSocket();
         _cancellationTokenSource = new CancellationTokenSource();
 
-        var uri = new Uri($"wss://ws.kite.trade?api_key={accessToken}");
+        var uri = new Uri($"wss://ws.kite.trade?api_key={_apiKey}&access_token={accessToken}");
         await _webSocket.ConnectAsync(uri, _cancellationTokenSource.Token);
         
         _logger.LogInformation("WebSocket connected");
