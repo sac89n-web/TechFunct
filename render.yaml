@@ -5,7 +5,7 @@ services:
     region: oregon
     plan: free
     branch: main
-    dockerfilePath: backend/Dockerfile
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: ConnectionStrings__DefaultConnection
       - key: KITE__APIKEY
