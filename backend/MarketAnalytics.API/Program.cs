@@ -47,6 +47,10 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Handle Render's PORT environment variable
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+app.Urls.Add($"http://0.0.0.0:{port}");
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

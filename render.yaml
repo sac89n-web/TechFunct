@@ -1,19 +1,16 @@
 services:
   - type: web
     name: market-analytics-backend
-    env: dotnet
+    environment: docker
     region: oregon
     plan: free
     branch: main
-    buildCommand: "cd backend/MarketAnalytics.API && dotnet publish -c Release -o out"
-    startCommand: "cd backend/MarketAnalytics.API/out && dotnet MarketAnalytics.API.dll"
+    dockerfilePath: backend/Dockerfile
     envVars:
       - key: ConnectionStrings__DefaultConnection
       - key: KITE__APIKEY
       - key: KITE__APISECRET
       - key: AllowedOrigins
-    ports:
-      - 5000
 
   - type: static
     name: market-analytics-frontend
