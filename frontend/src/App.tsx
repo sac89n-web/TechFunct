@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Link, Navigate, useSearchParams } from 'r
 import MarketRadar from './pages/MarketRadar';
 import StockAnalyzer from './pages/StockAnalyzer';
 import StrategiesDashboard from './pages/StrategiesDashboard';
+import OptionStrategyBuilder from './pages/OptionStrategyBuilder';
 import Login from './pages/Login';
 import { useAuth } from './hooks/useAuth';
 import { authApi } from './services/api';
@@ -39,6 +40,7 @@ const AppRoutes: React.FC = () => {
             <Link to="/" style={linkStyle}>Market Radar</Link>
             <Link to="/analyzer" style={linkStyle}>Stock Analyzer</Link>
             <Link to="/strategies" style={linkStyle}>Top 10 Strategies</Link>
+            <Link to="/options" style={linkStyle}>Option Strategies</Link>
           </div>
           <button onClick={handleLogout} style={logoutButtonStyle}
             onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)')}
@@ -67,6 +69,10 @@ const AppRoutes: React.FC = () => {
         <Route
           path="/strategies"
           element={isAuthenticated ? <StrategiesDashboard /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/options"
+          element={isAuthenticated ? <OptionStrategyBuilder /> : <Navigate to="/login" replace />}
         />
 
         {/* Catch-all */}

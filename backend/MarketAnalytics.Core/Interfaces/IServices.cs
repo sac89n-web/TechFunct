@@ -20,6 +20,7 @@ public interface IKiteConnectService
 public interface IInstrumentService
 {
     Task SyncInstrumentsAsync();
+    Task SyncOptionInstrumentsAsync();
     Task<InstrumentMaster?> GetInstrumentBySymbolAsync(string symbol, string exchange = "NSE");
     Task<List<InstrumentMaster>> GetIndexConstituentsAsync(string indexName);
     Task<List<string>> GetIndexSymbolsAsync(string indexName);

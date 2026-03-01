@@ -25,6 +25,11 @@ builder.Services.AddScoped<IMarketAnalyticsService, MarketAnalyticsService>();
 builder.Services.AddScoped<IStrategyService, StrategyService>();
 builder.Services.AddSingleton<IWebSocketService, WebSocketService>();
 
+// Options Engine services
+builder.Services.AddSingleton<IGreeksCalculator, GreeksCalculator>();
+builder.Services.AddScoped<IOptionsChainService, OptionsChainService>();
+builder.Services.AddScoped<IOptionStrategyEngine, OptionStrategyEngine>();
+
 builder.Services.AddHostedService<TokenRefreshService>();
 builder.Services.AddHostedService<MarketDataSyncService>();
 
@@ -61,5 +66,6 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<MarketDataHub>("/hubs/marketdata");
+app.MapHub<OptionsHub>("/hubs/options");
 
 app.Run();

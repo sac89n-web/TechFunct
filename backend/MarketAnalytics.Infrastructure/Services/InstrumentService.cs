@@ -210,6 +210,129 @@ public class InstrumentService : IInstrumentService
         }
     }
 
+    // ─── Option Instruments Sync ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Downloads Kite instruments CSV and upserts NFO/BFO option contracts
+    /// (CE/PE for NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX) expiring within
+    /// the next 3 months into instrument_master.  Must be called AFTER
+    /// SyncInstrumentsAsync (which TRUNCATEs the table) so that options survive.
+    /// </summary>
+    public async Task SyncOptionInstrumentsAsync()
+    {
+        var accessToken = await _kiteService.GetActiveAccessTokenAsync();
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            _logger.LogWarning("SyncOptionInstruments: no active Kite token");
+            return;
+        }
+
+        _httpClient.DefaultRequestHeaders.Clear();
+        _httpClient.DefaultRequestHeaders.Add("X-Kite-Version", "3");
+        _httpClient.DefaultRequestHeaders.Add("Authorization", $"token {_config["Kite:ApiKey"]}:{accessToken}");
+
+        var response = await _httpClient.GetAsync("https://api.kite.trade/instruments");
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("SyncOptionInstruments: Kite instruments endpoint returned {Status}", response.StatusCode);
+            return;
+        }
+
+        var csvData = await response.Content.ReadAsStringAsync();
+        var options = ParseOptionInstrumentsCsv(csvData);
+
+        if (options.Count == 0)
+        {
+            _logger.LogWarning("SyncOptionInstruments: no option instruments parsed");
+            return;
+        }
+
+        using var connection = new NpgsqlConnection(_connectionString);
+
+        foreach (var batch in options.Chunk(500))
+        {
+            await connection.ExecuteAsync(
+                @"INSERT INTO instrument_master
+                    (instrument_token, trading_symbol, exchange, segment, tick_size, lot_size,
+                     name, expiry, strike, instrument_type, last_updated)
+                  VALUES
+                    (@InstrumentToken, @TradingSymbol, @Exchange, @Segment, @TickSize, @LotSize,
+                     @Name, @Expiry, @Strike, @InstrumentType, @LastUpdated)
+                  ON CONFLICT (trading_symbol, exchange) DO UPDATE SET
+                    instrument_token = EXCLUDED.instrument_token,
+                    segment          = EXCLUDED.segment,
+                    tick_size        = EXCLUDED.tick_size,
+                    lot_size         = EXCLUDED.lot_size,
+                    name             = EXCLUDED.name,
+                    expiry           = EXCLUDED.expiry,
+                    strike           = EXCLUDED.strike,
+                    instrument_type  = EXCLUDED.instrument_type,
+                    last_updated     = EXCLUDED.last_updated",
+                batch
+            );
+        }
+
+        _logger.LogInformation("SyncOptionInstruments: upserted {Count} NFO/BFO option contracts", options.Count);
+    }
+
+    private static readonly HashSet<string> _optionNames =
+        new(StringComparer.OrdinalIgnoreCase)
+        { "NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX" };
+
+    private List<InstrumentMaster> ParseOptionInstrumentsCsv(string csvData)
+    {
+        var options = new List<InstrumentMaster>();
+        var cutoff  = DateTime.Today.AddMonths(3);
+        var lines   = csvData.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        // CSV columns (0-indexed):
+        // 0: instrument_token, 1: exchange_token, 2: tradingsymbol, 3: name,
+        // 4: last_price, 5: expiry, 6: strike, 7: tick_size, 8: lot_size,
+        // 9: instrument_type, 10: segment, 11: exchange
+
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var fields = lines[i].Split(',');
+            if (fields.Length < 12) continue;
+
+            var exchange       = fields[11].Trim('"', ' ');
+            var instrumentType = fields[9].Trim('"', ' ');
+            var name           = fields[3].Trim('"', ' ');
+
+            // Only NFO or BFO, only CE/PE, only known index names
+            if (exchange != "NFO" && exchange != "BFO") continue;
+            if (instrumentType != "CE" && instrumentType != "PE") continue;
+            if (!_optionNames.Contains(name)) continue;
+
+            if (!long.TryParse(fields[0].Trim(), out var token)) continue;
+
+            // Parse expiry — Kite uses yyyy-MM-dd
+            if (!DateTime.TryParse(fields[5].Trim('"', ' '), out var expiry)) continue;
+            if (expiry < DateTime.Today || expiry > cutoff) continue;
+
+            if (!decimal.TryParse(fields[6].Trim(), out var strike)) continue;
+
+            var instrument = new InstrumentMaster
+            {
+                InstrumentToken = token,
+                TradingSymbol   = fields[2].Trim('"', ' '),
+                Exchange        = exchange,
+                Segment         = fields[10].Trim('"', ' '),
+                TickSize        = decimal.TryParse(fields[7].Trim(), out var tick) ? tick : null,
+                LotSize         = int.TryParse(fields[8].Trim(), out var lot) ? lot : null,
+                Name            = name,
+                Expiry          = expiry,
+                Strike          = strike,
+                InstrumentType  = instrumentType,
+                LastUpdated     = DateTime.UtcNow
+            };
+
+            options.Add(instrument);
+        }
+
+        return options;
+    }
+
     // Private DTOs for Kite quote REST response
     private class KiteQuoteResponse
     {

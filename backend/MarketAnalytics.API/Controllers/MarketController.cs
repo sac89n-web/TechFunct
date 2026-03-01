@@ -85,8 +85,11 @@ public class MarketController : ControllerBase
     {
         try
         {
-            // Step 1: Download instruments CSV from Kite and save to instrument_master
+            // Step 1a: Download instruments CSV from Kite and save NSE EQ to instrument_master
             await _instrumentService.SyncInstrumentsAsync();
+
+            // Step 1b: Upsert NFO/BFO option contracts (must run after EQ truncate)
+            await _instrumentService.SyncOptionInstrumentsAsync();
 
             // Step 2: Collect all unique symbols across all tracked indices
             var allSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
